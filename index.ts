@@ -3,10 +3,36 @@
 // Get args from command line
 const args = process.argv.slice(2);
 if (args.length == 0) {
-  console.log("Usage: svails form <fields>");
+  console.log("Usage:");
+  console.log("  svails init <name>");
+  console.log("  svails form <fields>");
   process.exit(1);
 } else {
-  if (args[0] == "form") {
+  // Get command
+  const command = args[0];
+  if (command == "init") {
+    // Initialize svails template
+    if (args.length < 2) {
+      console.log("Usage:");
+      console.log("  svails init <name>");
+      process.exit(1);
+    }
+    const { success } = Bun.spawnSync({
+      cmd: ["git", "clone", "https://github.com/svails/svails", args[1]],
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if (!success) {
+      console.error("Failed to clone the repository.");
+      process.exit(1);
+    }
+  } else if (command == "form") {
+    // Create shadcn-svelte form
+    if (args.length < 1) {
+      console.log("Usage:");
+      console.log("  svails form <name>:<type>");
+      process.exit(1);
+    }
     await form(args.slice(1));
   } else {
     console.log("Unknown command:", args[0]);
