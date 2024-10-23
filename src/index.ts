@@ -4,21 +4,21 @@
 const args = process.argv.slice(2);
 if (args.length == 0) {
   console.log("Usage:");
-  console.log("  svails init <name>");
-  console.log("  svails form <fields>");
+  console.log("  svails init <field>");
+  console.log("  svails form <name> <field>:<type>");
   process.exit(1);
 } else {
   // Get command
   const command = args[0];
   if (command == "init") {
     // Initialize svails template
-    if (args.length < 2) {
+    if (args.length < 3) {
       console.log("Usage:");
-      console.log("  svails init <name>");
+      console.log("  svails init <template> <name>");
       process.exit(1);
     }
     const { success } = Bun.spawnSync({
-      cmd: ["git", "clone", "https://github.com/svails/svails", args[1]],
+      cmd: ["git", "clone", `https://github.com/svails/${args[1]}`, args[2]],
       stdout: "inherit",
       stderr: "inherit",
     });
@@ -28,12 +28,12 @@ if (args.length == 0) {
     }
   } else if (command == "form") {
     // Create shadcn-svelte form
-    if (args.length < 1) {
+    if (args.length < 3) {
       console.log("Usage:");
-      console.log("  svails form <name>:<type>");
+      console.log("  svails form <name> <field>:<type>");
       process.exit(1);
     }
-    await form(args.slice(1));
+    await form(args[1], args.slice(2));
   } else {
     console.log("Unknown command:", args[0]);
     process.exit(1);
@@ -41,23 +41,23 @@ if (args.length == 0) {
 }
 
 // Generate shadcn-svelte form from fields
-type Field = { name: string; type: string };
+type Field = { field: string; type: string };
 
-function renderInput({ name, type }: Field): string {
+function renderInput({ field, type }: Field, formName: string): string {
   if (type == "textarea") {
-    return `<Textarea {...attrs} bind:value={$formData.${name}} rows={4} />`;
+    return `<Textarea {...attrs} bind:value={$${formName}.form.${field}} rows={4} />`;
   } else if (type == "files") {
-    return `<Input {...attrs} bind:value={$formData.${name}} type="file" multiple />`;
+    return `<Input {...attrs} bind:value={$${formName}.form.${field}} type="file" multiple />`;
   } else {
-    return `<Input {...attrs} bind:value={$formData.${name}} type="${type}" />`;
+    return `<Input {...attrs} bind:value={$${formName}.form.${field}} type="${field}" />`;
   }
 }
 
-function renderField({ name, type }: Field): string {
-  return `  <Form.Field {form} name="${name}">
+function renderField({ field, type }: Field, formName: string): string {
+  return `  <Form.Field form={${formName}} field="${field}">
     <Form.Control let:attrs>
-      <Form.Label>${name.charAt(0).toUpperCase() + name.slice(1)}</Form.Label>
-      ${renderInput({ name, type })}
+      <Form.Label>${field.charAt(0).toUpperCase() + field.slice(1)}</Form.Label>
+      ${renderInput({ field, type }, formName)}
     </Form.Control>
     <Form.FieldErrors />
   </Form.Field>`;
@@ -82,31 +82,31 @@ function renderFormType(renderedFields: string): string {
   }
 }
 
-function renderSchemaField({ name, type }: Field): string {
+function renderSchemaField({ field, type }: Field): string {
   if (type == "email") {
-    return `  ${name}: z.string().email(),`;
+    return `  ${field}: z.string().email(),`;
   } else if (type == "password") {
-    return `  ${name}: z.string().min(8, { message: "Password must be minimum 8 characters" }),`;
+    return `  ${field}: z.string().min(8, { message: "Password must be minimum 8 characters" }),`;
   } else if (type == "number") {
-    return `  ${name}: z.number(),`;
+    return `  ${field}: z.number(),`;
   } else if (type == "file") {
-    return `  ${name}: z.instanceof(File),`;
+    return `  ${field}: z.instanceof(File),`;
   } else if (type == "files") {
-    return `  ${name}: z.array(z.instanceof(File)),`;
+    return `  ${field}: z.array(z.instanceof(File)),`;
   } else {
-    return `  ${name}: z.string(),`;
+    return `  ${field}: z.string(),`;
   }
 }
 
-async function form(args: string[]) {
+async function form(formName: string, args: string[]) {
   // Parse fields
   const fields = args.map<Field>(arg => {
-    const [name, type] = arg.split(':');
-    return { name, type };
+    const [field, type] = arg.split(':');
+    return { field, type };
   });
 
   // Generate +page.svelte
-  const renderedFields = fields.map(renderField).join("\n\n");
+  const renderedFields = fields.map((field) => renderField(field, formName)).join("\n\n");
   const renderedHeader = renderHeader(renderedFields);
   const pageSvelte = `<script lang="ts">
   import * as Form from "$ui/form";
@@ -116,15 +116,16 @@ ${renderedHeader}
 
   // Props
   const { data } = $props();
-  const form = superForm(data.form);
-  const { form: formData, delayed, submitting, enhance } = form;
+  const ${formName} = superForm(data.${formName});
 </script>
 
-<form class="grid gap-2" method="post"${renderFormType(renderedFields)} use:enhance>
+<h1 class="text-xl font-bold mb-4">${formName.charAt(0).toUpperCase() + formName.slice(1)}<h1>
+
+<form class="grid gap-2" method="post"${renderFormType(renderedFields)} use:enhance={${formName}.enhance}>
 ${renderedFields}
 
-  <Form.Button disabled={$submitting}>
-    {#if $delayed}
+  <Form.Button disabled={$${formName}.submitting}>
+    {#if $${formName}.delayed}
       <Loader class="animate-spin" />
     {:else}
       Submit
@@ -133,29 +134,30 @@ ${renderedFields}
 </form>`;
 
   // Generate +page.server.ts
+  const schemaName = `${formName}Schema`;
   const renderedSchemaFields = fields.map(renderSchemaField).join("\n").trimEnd();
-  const pageServer = `import type { Actions, PageServerLoad } from "./$types";
-import { z } from "zod";
+  const pageServer = `import { z } from "zod";
 import { zod } from "sveltekit-superforms/adapters";
 import { fail, superValidate } from "sveltekit-superforms";
+import { type Actions, type PageServerLoad } from "./$types";
 
-const schema = z.object({
+const ${schemaName} = z.object({
 ${renderedSchemaFields}
 });
 
 export const load: PageServerLoad = async () => {
   // Initialize form
   return {
-    form: await superValidate(zod(schema)),
+    ${formName}: await superValidate(zod(${schemaName})),
   };
 };
 
 export const actions: Actions = {
   default: async ({ request }) => {
     // Validate form
-    const form = await superValidate(request, zod(schema));
-    if (!form.valid) return fail(400, { form });
-    const { ${fields.map(field => field.name).join(", ")} } = form.data;
+    const ${formName} = await superValidate(request, zod(${schemaName}));
+    if (!${formName}.valid) return fail(400, { form: ${formName} });
+    const { ${fields.map(({ field }) => field).join(", ")} } = ${formName}.data;
 
     // Business logic
   },
