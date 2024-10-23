@@ -26,6 +26,19 @@ if (args.length == 0) {
       console.error("Failed to clone the repository.");
       process.exit(1);
     }
+
+    // Move the .git folder away
+    Bun.spawnSync({
+      cmd: ["mv", `${args[2]}/.git`, `/tmp/${crypto.randomUUID()}`],
+    });
+
+    // Replace Svails with uppercase name and svails with lowercase name
+    Bun.spawnSync({
+      cmd: ["find", args[2], "-type", "f", "-exec", "sed", "-i", `s/Svails/${titleCase(args[2])}/g`, "{}", "+"],
+    });
+    Bun.spawnSync({
+      cmd: ["find", args[2], "-type", "f", "!", "-name", "README.md", "-exec", "sed", "-i", `s/svails\\|svails-fullstack/${args[2]}/g`, "{}", "+"],
+    });
   } else if (command == "form") {
     // Create shadcn-svelte form
     if (args.length < 3) {
@@ -40,23 +53,27 @@ if (args.length == 0) {
   }
 }
 
+function titleCase(input: string): string {
+  return input.charAt(0).toUpperCase() + input.slice(1);
+}
+
 // Generate shadcn-svelte form from fields
 type Field = { field: string; type: string };
 
 function renderInput({ field, type }: Field, name: string): string {
   if (type == "textarea") {
-    return `<Textarea {...attrs} bind:value={$${name}.form.${field}} rows={4} />`;
+    return `<Textarea {...attrs} bind:value={$${name}Data.${field}} rows={4} />`;
   } else if (type == "files") {
-    return `<Input {...attrs} bind:value={$${name}.form.${field}} type="file" multiple />`;
+    return `<Input {...attrs} bind:value={$${name}Data.${field}} type="file" multiple />`;
   } else {
-    return `<Input {...attrs} bind:value={$${name}.form.${field}} type="${field}" />`;
+    return `<Input {...attrs} bind:value={$${name}Data.${field}} type="${type}" />`;
   }
 }
 
 function renderField({ field, type }: Field, name: string): string {
-  return `  <Form.Field form={${name}} field="${field}">
+  return `  <Form.Field form={${name}} name="${field}">
     <Form.Control let:attrs>
-      <Form.Label>${field.charAt(0).toUpperCase() + field.slice(1)}</Form.Label>
+      <Form.Label>${titleCase(field)}</Form.Label>
       ${renderInput({ field, type }, name)}
     </Form.Control>
     <Form.FieldErrors />
@@ -117,15 +134,16 @@ ${renderedHeader}
   // Props
   const { data } = $props();
   const ${name} = superForm(data.${name});
+  const { form: ${name}Data, delayed: ${name}Delayed, submitting: ${name}Submitting, enhance: ${name}Enhance } = ${name};
 </script>
 
-<h1 class="text-xl font-bold mb-4">${name.charAt(0).toUpperCase() + name.slice(1)}</h1>
+<h1 class="text-2xl font-bold mb-4">${titleCase(name)}</h1>
 
-<form class="grid gap-2" method="post"${renderFormType(renderedFields)} use:enhance={${name}.enhance}>
+<form class="grid gap-2" method="post" action="?/${name}"${renderFormType(renderedFields)} use:${name}Enhance>
 ${renderedFields}
 
-  <Form.Button disabled={$${name}.submitting}>
-    {#if $${name}.delayed}
+  <Form.Button disabled={$${name}Submitting}>
+    {#if $${name}Delayed}
       <Loader class="animate-spin" />
     {:else}
       Submit
@@ -139,7 +157,7 @@ ${renderedFields}
   const pageServer = `import { z } from "zod";
 import { zod } from "sveltekit-superforms/adapters";
 import { fail, superValidate } from "sveltekit-superforms";
-import { type Actions, type PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad } from "./$types";
 
 const ${schemaName} = z.object({
 ${renderedSchemaFields}
@@ -153,13 +171,12 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
-  default: async ({ request }) => {
+  ${name}: async ({ request }) => {
     // Validate form
     const ${name} = await superValidate(request, zod(${schemaName}));
-    if (!${name}.valid) return fail(400, { form: ${name} });
+    if (!${name}.valid) return fail(400, { ${name} });
     const { ${fields.map(({ field }) => field).join(", ")} } = ${name}.data;
-
-    // Business logic
+    console.log(${fields.map(({ field }) => field).join(", ")});
   },
 };`;
 
