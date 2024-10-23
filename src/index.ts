@@ -43,21 +43,21 @@ if (args.length == 0) {
 // Generate shadcn-svelte form from fields
 type Field = { field: string; type: string };
 
-function renderInput({ field, type }: Field, formName: string): string {
+function renderInput({ field, type }: Field, name: string): string {
   if (type == "textarea") {
-    return `<Textarea {...attrs} bind:value={$${formName}.form.${field}} rows={4} />`;
+    return `<Textarea {...attrs} bind:value={$${name}.form.${field}} rows={4} />`;
   } else if (type == "files") {
-    return `<Input {...attrs} bind:value={$${formName}.form.${field}} type="file" multiple />`;
+    return `<Input {...attrs} bind:value={$${name}.form.${field}} type="file" multiple />`;
   } else {
-    return `<Input {...attrs} bind:value={$${formName}.form.${field}} type="${field}" />`;
+    return `<Input {...attrs} bind:value={$${name}.form.${field}} type="${field}" />`;
   }
 }
 
-function renderField({ field, type }: Field, formName: string): string {
-  return `  <Form.Field form={${formName}} field="${field}">
+function renderField({ field, type }: Field, name: string): string {
+  return `  <Form.Field form={${name}} field="${field}">
     <Form.Control let:attrs>
       <Form.Label>${field.charAt(0).toUpperCase() + field.slice(1)}</Form.Label>
-      ${renderInput({ field, type }, formName)}
+      ${renderInput({ field, type }, name)}
     </Form.Control>
     <Form.FieldErrors />
   </Form.Field>`;
@@ -98,7 +98,7 @@ function renderSchemaField({ field, type }: Field): string {
   }
 }
 
-async function form(formName: string, args: string[]) {
+async function form(name: string, args: string[]) {
   // Parse fields
   const fields = args.map<Field>(arg => {
     const [field, type] = arg.split(':');
@@ -106,7 +106,7 @@ async function form(formName: string, args: string[]) {
   });
 
   // Generate +page.svelte
-  const renderedFields = fields.map((field) => renderField(field, formName)).join("\n\n");
+  const renderedFields = fields.map((field) => renderField(field, name)).join("\n\n");
   const renderedHeader = renderHeader(renderedFields);
   const pageSvelte = `<script lang="ts">
   import * as Form from "$ui/form";
@@ -116,16 +116,16 @@ ${renderedHeader}
 
   // Props
   const { data } = $props();
-  const ${formName} = superForm(data.${formName});
+  const ${name} = superForm(data.${name});
 </script>
 
-<h1 class="text-xl font-bold mb-4">${formName.charAt(0).toUpperCase() + formName.slice(1)}<h1>
+<h1 class="text-xl font-bold mb-4">${name.charAt(0).toUpperCase() + name.slice(1)}</h1>
 
-<form class="grid gap-2" method="post"${renderFormType(renderedFields)} use:enhance={${formName}.enhance}>
+<form class="grid gap-2" method="post"${renderFormType(renderedFields)} use:enhance={${name}.enhance}>
 ${renderedFields}
 
-  <Form.Button disabled={$${formName}.submitting}>
-    {#if $${formName}.delayed}
+  <Form.Button disabled={$${name}.submitting}>
+    {#if $${name}.delayed}
       <Loader class="animate-spin" />
     {:else}
       Submit
@@ -134,7 +134,7 @@ ${renderedFields}
 </form>`;
 
   // Generate +page.server.ts
-  const schemaName = `${formName}Schema`;
+  const schemaName = `${name}Schema`;
   const renderedSchemaFields = fields.map(renderSchemaField).join("\n").trimEnd();
   const pageServer = `import { z } from "zod";
 import { zod } from "sveltekit-superforms/adapters";
@@ -148,16 +148,16 @@ ${renderedSchemaFields}
 export const load: PageServerLoad = async () => {
   // Initialize form
   return {
-    ${formName}: await superValidate(zod(${schemaName})),
+    ${name}: await superValidate(zod(${schemaName})),
   };
 };
 
 export const actions: Actions = {
   default: async ({ request }) => {
     // Validate form
-    const ${formName} = await superValidate(request, zod(${schemaName}));
-    if (!${formName}.valid) return fail(400, { form: ${formName} });
-    const { ${fields.map(({ field }) => field).join(", ")} } = ${formName}.data;
+    const ${name} = await superValidate(request, zod(${schemaName}));
+    if (!${name}.valid) return fail(400, { form: ${name} });
+    const { ${fields.map(({ field }) => field).join(", ")} } = ${name}.data;
 
     // Business logic
   },
@@ -165,9 +165,9 @@ export const actions: Actions = {
 
   // Create files
   await Promise.all([
-    Bun.write("+page.svelte", pageSvelte),
-    Bun.write("+page.server.ts", pageServer),
+    Bun.write(`${name}/+page.svelte`, pageSvelte),
+    Bun.write(`${name}/+page.server.ts`, pageServer),
   ]);
-  console.log(`Created +page.svelte`);
-  console.log(`Created +page.server.ts`);
+  console.log(`Created ${name}/+page.svelte`);
+  console.log(`Created ${name}/+page.server.ts`);
 }
