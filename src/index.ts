@@ -37,7 +37,7 @@ if (args.length == 0) {
       cmd: ["find", args[2], "-type", "f", "-exec", "sed", "-i", `s/Svails/${titleCase(args[2])}/g`, "{}", "+"],
     });
     Bun.spawnSync({
-      cmd: ["find", args[2], "-type", "f", "!", "-name", "README.md", "-exec", "sed", "-i", `s/svails\\|svails-fullstack/${args[2]}/g`, "{}", "+"],
+      cmd: ["find", args[2], "-type", "f", "!", "-name", "README.md", "-exec", "sed", "-i", `s/svails\\|svails-fullstack\\|svails-api/${args[2]}/g`, "{}", "+"],
     });
   } else if (command == "form") {
     // Create shadcn-svelte form
