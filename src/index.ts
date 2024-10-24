@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { readdir } from "node:fs/promises";
+
 // Get args from command line
 const args = process.argv.slice(2);
 if (args.length == 0) {
@@ -32,7 +34,7 @@ if (args.length == 0) {
       cmd: ["mv", `${args[2]}/.git`, `/tmp/${crypto.randomUUID()}`],
     });
 
-    // Replace Svails with uppercase name and svails with lowercase name
+    // Replace Svails with uppercase name and svails* with lowercase name
     Bun.spawnSync({
       cmd: ["find", args[2], "-type", "f", "-exec", "sed", "-i", `s/Svails/${titleCase(args[2])}/g`, "{}", "+"],
     });
@@ -110,8 +112,35 @@ function renderSchemaField({ field, type }: Field): string {
     return `  ${field}: z.instanceof(File),`;
   } else if (type == "files") {
     return `  ${field}: z.array(z.instanceof(File)),`;
+  } else if (type == "date") {
+    return `  ${field}: z.date(),`;
   } else {
     return `  ${field}: z.string(),`;
+  }
+}
+
+async function projectName(): Promise<string | null> {
+  let folder = ".";
+  for (let i = 0; i < 10; i++) {
+    const files = await readdir(folder);
+    if (files.includes("package.json")) {
+      const file = Bun.file(`${folder}package.json`);
+      const body = await file.text();
+      const json = JSON.parse(body);
+      return json["name"];
+    }
+    folder = folder == "." ? "../" : folder + "../";
+  }
+  return null;
+}
+
+async function renderTitle(name: string): Promise<string> {
+  // Try and find name for project
+  const project = await projectName();
+  if (project) {
+    return `${titleCase(name)} - ${titleCase(project)}`;
+  } else {
+    return `${titleCase(name)}`;
   }
 }
 
@@ -136,6 +165,10 @@ ${renderedHeader}
   const ${name} = superForm(data.${name});
   const { form: ${name}Data, delayed: ${name}Delayed, submitting: ${name}Submitting, enhance: ${name}Enhance } = ${name};
 </script>
+
+<svelte:head>
+  <title>${await renderTitle(name)}</title>
+</svelte:head>
 
 <h1 class="text-2xl font-bold mb-4">${titleCase(name)}</h1>
 
