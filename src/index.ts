@@ -67,6 +67,18 @@ function renderInput({ field, type }: Field, name: string): string {
     return `<Textarea {...attrs} bind:value={$${name}Data.${field}} rows={4} />`;
   } else if (type == "files") {
     return `<Input {...attrs} bind:value={$${name}Data.${field}} type="file" multiple />`;
+  } else if (type == "select") {
+    return `<Select.Root selected={selected${titleCase(field)}} onSelectedChange={(change) => change && ($${name}Data.${field} = change.value)}>
+        <Select.Trigger {...attrs}>
+          <Select.Value />
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Item value="first">Option 1</Select.Item>
+          <Select.Item value="second">Option 2</Select.Item>
+          <Select.Item value="third">Option 3</Select.Item>
+        </Select.Content>
+      </Select.Root>
+      <input hidden bind:value={$${name}Data.${field}} name={attrs.name} />`;
   } else {
     return `<Input {...attrs} bind:value={$${name}Data.${field}} type="${type}" />`;
   }
@@ -84,6 +96,9 @@ function renderField({ field, type }: Field, name: string): string {
 
 function renderHeader(renderedFields: string): string {
   let output = "";
+  if (renderedFields.includes("Select")) {
+    output += `  import * as Select from "$ui/select";\n`;
+  }
   if (renderedFields.includes("Input")) {
     output += `  import { Input } from "$ui/input";\n`;
   }
@@ -139,9 +154,18 @@ async function renderTitle(name: string): Promise<string> {
   const project = await projectName();
   if (project) {
     return `${titleCase(name)} - ${titleCase(project)}`;
-  } else {
-    return `${titleCase(name)}`;
   }
+  return `${titleCase(name)}`;
+}
+
+function renderScript(name: string, fields: Field[]): string {
+  let output = "";
+  for (let { field, type } of fields) {
+    if (type == "select") {
+      output += `\n  const selected${titleCase(field)} = $derived.by(() => $${name}Data.${field} ? { label: $${name}Data.${field}, value: $${name}Data.${field} } : undefined);`;
+    }
+  }
+  return output;
 }
 
 async function form(name: string, args: string[]) {
@@ -163,7 +187,7 @@ ${renderedHeader}
   // Props
   const { data } = $props();
   const ${name} = superForm(data.${name});
-  const { form: ${name}Data, delayed: ${name}Delayed, submitting: ${name}Submitting, enhance: ${name}Enhance } = ${name};
+  const { form: ${name}Data, delayed: ${name}Delayed, submitting: ${name}Submitting, enhance: ${name}Enhance } = ${name};${renderScript(name, fields)}
 </script>
 
 <svelte:head>
